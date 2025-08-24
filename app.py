@@ -1,11 +1,16 @@
 from flask import Flask, render_template, request, redirect, url_for
 import sqlite3
+import os
 
 app = Flask(__name__)
 DB_NAME = "tasks.db"
 
+# Ensure database file path is absolute for systemd/Gunicorn
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), DB_NAME)
+
 def init_db():
-    with sqlite3.connect(DB_NAME) as conn:
+    """Initialize the SQLite database."""
+    with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
@@ -16,9 +21,12 @@ def init_db():
         """)
         conn.commit()
 
+# Initialize database when module is imported
+init_db()
+
 @app.route("/")
 def index():
-    with sqlite3.connect(DB_NAME) as conn:
+    with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, title, done FROM tasks")
         tasks = cursor.fetchall()
@@ -28,7 +36,7 @@ def index():
 def add():
     title = request.form.get("title")
     if title:
-        with sqlite3.connect(DB_NAME) as conn:
+        with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", (title, 0))
             conn.commit()
@@ -36,7 +44,7 @@ def add():
 
 @app.route("/toggle/<int:task_id>")
 def toggle(task_id):
-    with sqlite3.connect(DB_NAME) as conn:
+    with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT done FROM tasks WHERE id=?", (task_id,))
         current_status = cursor.fetchone()[0]
@@ -47,12 +55,12 @@ def toggle(task_id):
 
 @app.route("/delete/<int:task_id>")
 def delete(task_id):
-    with sqlite3.connect(DB_NAME) as conn:
+    with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM tasks WHERE id=?", (task_id,))
         conn.commit()
     return redirect(url_for("index"))
 
-if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=8000, debug=True)
+# Do NOT use app.run() when using Gunicorn
+# if __name__ == "__main__":
+#     app.run(host="0.0.0.0", port=8000, debug=True)
